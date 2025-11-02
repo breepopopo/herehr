@@ -196,7 +196,16 @@ path_t *bfs_find_minimal_cycles_including_edge(graph_t *g, size_t start_edge_ind
   for (size_t i = 0; i < frontier_size; ++i) {
     frontier[i] = g->nodes[g->edges[start_edge_index].to].out[i];
   }
+  size_t total = 0;
+  #pragma omp parallel for
+  for (size_t i = 0; i < g->nodes[g->edges[start_edge_index].to].out_count; ++i) {
+	 next_frontier_sizes[i] = g->nodes[g->nodes[g->edges[start_edge_index].to].out[i];
+	 #pragma atomic update
+	 total += g->nodes[g->nodes[g->edges[start_edge_index].to].out[i]].out_count;
+  }
 
+	next_frontier = malloc(sizeof(size_t) * total);
+	
   #pragma omp parallel
   {
     size_t thread_num = omp_get_thread_num();
@@ -204,7 +213,14 @@ path_t *bfs_find_minimal_cycles_including_edge(graph_t *g, size_t start_edge_ind
     size_t chunk_size = (frontier_size + num_threads - 1) / num_threads;
     size_t local_start = thread_num * chunk_size;
     size_t local_end = (local_start + chunk_size > frontier_size) ? frontier_size : local_start + chunk_size;
-
+	
+	size_t local_mem_size = 0;
+	for (size_t i = local_start; i < local_end; ++i) {
+		local_mem_size += g->nodes[i].out_count;
+	}
+	next_frontier_sizes[thread_num] = local_mem_size;
+	
+	
     for (size_t i = local_start; i < local_end; ++i) {
       size_t edge_index = frontier[i];
       size_t to_node = g->edges[edge_index].to;
