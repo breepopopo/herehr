@@ -85,11 +85,12 @@ void free_graph(node_t *nodes, uint32_t num_nodes) {
 //allocate cycle_lenghts first (lazy implementation)
 uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, uint32_t num_nodes, uint32_t *cycle_lenghts, uint32_t cycle_target) {
     uint32_t **cycles = malloc(sizeof(void *) * cycle_target), cycle_count = 0, thread_num = omp_get_max_threads();
+    uint32_t init_size = nodes[start_index].out_count;
     if (!cycles) {
         perror("Failed to allocate memory for cycles");
         return NULL;
     }
-    uint32_t init_size = nodes[start_index].out_count;
+
     #pragma omp parallel
     {
         uint32_t tid = omp_get_thread_num();
@@ -168,7 +169,7 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
                                 to_break = true;
                                 break;
                             }
-                            
+
                             memcpy(next_paths[next_paths_count], local_paths[i], sizeof(uint32_t) * local_path_lenght);
                             next_paths[next_paths_count++][local_path_lenght] = next_node;
                         }
