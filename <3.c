@@ -5,16 +5,14 @@
 #include <omp.h>
 #include <immintrin.h>
 
-typedef struct node node_t;
-
-node_t {
+typedef struct {
     uint8_t *x;
     uint8_t *y;
     uint32_t x_length;
     uint32_t y_length;
     uint32_t *out;
     uint32_t out_count;
-};
+} node_t;
 
 node_t *init_graph(uint32_t num_nodes, const char *x_file, const char *y_file, uint32_t x_length, uint32_t y_length) {
     FILE *fx = fopen(x_file, "rb");
@@ -120,8 +118,9 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
                     uint32_t next_node = nodes[local_paths[i][local_path_lenght - 1]].out[j];
                     if (next_node == start_index) continue;
                     if (next_node == end_index) {
+                        uint32_t the_cycle_count;
                         #pragma omp atomic capture
-                        uint32_t the_cycle_count = cycle_count++;
+                        the_cycle_count = cycle_count++;
                         if (the_cycle_count < cycle_target) {
                             cycles[the_cycle_count] = malloc(sizeof(uint32_t) * (local_path_lenght + 1));
                             memcpy(cycles[the_cycle_count], local_paths[i], sizeof(uint32_t) * local_path_lenght);
@@ -153,7 +152,6 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
             for (uint32_t i = 0; i < local_paths_count; ++i)
                 free(local_paths[i]);
             free(local_paths);
-
             local_paths = next_paths;
             local_paths_count = next_paths_count;
             local_path_lenght++;
@@ -165,3 +163,4 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
     }
     return cycles;
 }
+
