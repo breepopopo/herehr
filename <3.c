@@ -82,7 +82,7 @@ void free_graph(node_t *nodes, uint32_t num_nodes) {
     free(nodes);
 }
 
-//allocate cycle_lenghts first (lazy implementation)
+//allocate cycle_lenghts first (lazy implementation, prolly need dynamic alloc)
 uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, uint32_t num_nodes, uint32_t *cycle_lenghts, uint32_t cycle_target) {
     uint32_t **cycles = malloc(sizeof(void *) * cycle_target), cycle_count = 0, thread_num = omp_get_max_threads();
     uint32_t init_size = nodes[start_index].out_count;
