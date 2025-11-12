@@ -8,13 +8,13 @@
 typedef struct {
     uint8_t *x;
     uint8_t *y;
-    uint32_t x_length;
-    uint32_t y_length;
     uint32_t *out;
     uint32_t out_count;
+    uint32_t padding;
 } node_t;
 
-node_t *init_graph(uint32_t num_nodes, const char *x_file, const char *y_file, uint32_t x_length, uint32_t y_length) {
+node_t *init_graph(uint32_t *num_nodes_pointer, const char *x_file, const char *y_file, uint32_t x_length, uint32_t y_length) {
+    uint32_t num_nodes = *num_nodes_pointer;
     FILE *fx = fopen(x_file, "rb");
     FILE *fy = fopen(y_file, "rb");
     if (!fx || !fy) {
@@ -55,13 +55,11 @@ node_t *init_graph(uint32_t num_nodes, const char *x_file, const char *y_file, u
             break;
         }
     }
+
     fclose(fx);
     fclose(fy);
-
     #pragma omp parallel for
     for (uint32_t i = 0; i < num_nodes; ++i) {
-        nodes[i].x_length = x_length;
-        nodes[i].y_length = y_length;
         nodes[i].out = malloc(sizeof(uint32_t) * (num_nodes - 1));
         nodes[i].out_count = 0;
         for (uint32_t j = 0; j < i; ++j) {
@@ -71,7 +69,7 @@ node_t *init_graph(uint32_t num_nodes, const char *x_file, const char *y_file, u
             nodes[i].out[nodes[i].out_count++] = j;
         }
     }
-
+    *num_nodes_pointer = num_nodes;
     return nodes;
 }
 
@@ -87,6 +85,10 @@ void free_graph(node_t *nodes, uint32_t num_nodes) {
 //allocate cycle_lenghts first (lazy implementation)
 uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, uint32_t num_nodes, uint32_t *cycle_lenghts, uint32_t cycle_target) {
     uint32_t **cycles = malloc(sizeof(void *) * cycle_target), cycle_count = 0, thread_num = omp_get_max_threads();
+    if (!cycles) {
+        perror("Failed to allocate memory for cycles");
+        return NULL;
+    }
     uint32_t init_size = nodes[start_index].out_count;
     #pragma omp parallel
     {
@@ -99,6 +101,11 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
         uint32_t **local_paths = malloc(sizeof(void *) * (end - start));
         uint32_t local_path_lenght = 2;
         uint32_t local_paths_count = 0;
+        if (!local_paths) {
+            perror("Failed to allocate memory for local paths");
+            return;
+        }
+        
         for (uint32_t i = start; i < end; ++i) {
             if (nodes[start_index].out[i] == end_index) continue;
             local_paths[local_paths_count] = malloc(sizeof(uint32_t) * 2);
@@ -112,6 +119,14 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
                 temp += nodes[local_paths[i][local_path_lenght - 1]].out_count;
             }
             next_paths = malloc(sizeof(void *) * temp);
+            if (!next_paths) {
+                perror("Failed to allocate memory for next paths");
+                for (uint32_t i = 0; i < local_paths_count; ++i)
+                    free(local_paths[i]);
+                free(local_paths);
+                return;
+            }
+
             bool to_break = false;
             for (uint32_t i = 0; i < local_paths_count; ++i) {
                 for (uint32_t j = 0; j < nodes[local_paths[i][local_path_lenght - 1]].out_count; ++j) {
@@ -123,6 +138,12 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
                         the_cycle_count = cycle_count++;
                         if (the_cycle_count < cycle_target) {
                             cycles[the_cycle_count] = malloc(sizeof(uint32_t) * (local_path_lenght + 1));
+                            if (!cycles[the_cycle_count]) {
+                                perror("Failed to allocate memory for cycle");
+                                to_break = true;
+                                break;
+                            }
+
                             memcpy(cycles[the_cycle_count], local_paths[i], sizeof(uint32_t) * local_path_lenght);
                             cycles[the_cycle_count][local_path_lenght] = end_index;
                             cycle_lenghts[the_cycle_count] = local_path_lenght + 1;
@@ -142,6 +163,12 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
                             continue;
                         } else {
                             next_paths[next_paths_count] = malloc(sizeof(uint32_t) * (local_path_lenght + 1));
+                            if (!next_paths[next_paths_count]) {
+                                perror("Failed to allocate memory for next path");
+                                to_break = true;
+                                break;
+                            }
+                            
                             memcpy(next_paths[next_paths_count], local_paths[i], sizeof(uint32_t) * local_path_lenght);
                             next_paths[next_paths_count++][local_path_lenght] = next_node;
                         }
@@ -164,3 +191,4 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
     return cycles;
 }
 
+A*B*C = I
