@@ -10,7 +10,6 @@ typedef struct {
     uint8_t *y;
     uint32_t *out;
     uint32_t out_count;
-    uint32_t padding;
 } node_t;
 
 node_t *init_graph(uint32_t *num_nodes_pointer, const char *x_file, const char *y_file, uint32_t x_length, uint32_t y_length) {
@@ -192,4 +191,56 @@ uint32_t **find_cycles(node_t *nodes, uint32_t start_index, uint32_t end_index, 
     return cycles;
 }
 
-A*B*C = I
+void free_cycles(uint32_t **cycles, uint32_t cycle_target) {
+    for (uint32_t i = 0; i < cycle_target; ++i) {
+        free(cycles[i]);
+    }
+    free(cycles);
+}
+
+Ax = y
+
+
+1 a12 a13 a14  x1  =  y1
+0   1 a23 a24  x2     y2
+0   0   1 a34  x3     y3
+0   0   0   1  0      0
+
+1*x1 + a12*x2 + a13*x3 = y1
+1*x2 + a23*x3 = y2
+1*x3 = y3
+
+1 a12 a13 a14  1 b12 b13 b14
+0   1 a23 a24  0   1 b23 b24
+0   0   1 a34  0   0   1 b34
+0   0   0 a44  0   0   0 b44
+
+1*1 1*b12 + a12*1 1*b13 + a12*b23 + a13*1 1*b14 + a12*b24 + a13*b34 + a14*b44  1 c12 c13 c14
+0       1*1           1*b23 + a23*1           1*b24 + a23*b34 + a24*b44        0   1 c23 c24
+0       0                 1*1                     1*b34 + a34*b44              0   0   1 c34
+0       0                 0                           a44*b44                  0   0   0 c44
+
+1*1*1 1*1*c12 + 1*b12*1 1*1*c13 + 1*b12*c23 + 1*b13*1 1*1*c14 + 1*b12*c24 + 1*b13*c34 + 1*b14*c44  =  1 0 0 0
+0           1*1*1               1*1*c23 + 1*b23*1               1*1*c24 + 1*b23*c34 + 1*b24*c44       0 1 0 0
+0           0                           1*1*1                           1*1*c34 + 1*b34*c44           0 0 1 0
+0           0                           0                                     a44*b44*c44             0 0 0 0
+
+1*1*1 = 1
+1*1*c12 + 1*b12*1 = 0
+1*1*c13 + 1*b12*c23 + 1*b13*1 = 0
+1*1*c14 + 1*b12*c24 + 1*b13*c34 + 1*b14*c44 = 0
+
+0 = 0
+1*1*1 = 1
+1*1*c23 + 1*b23*1 = 0
+1*1*c24 + 1*b23*c34 + 1*b24*c44 = 0
+
+0 = 0
+0 = 0
+1*1*1 = 1
+1*1*c34 + 1*b34*c44 = 0
+
+0 = 0
+0 = 0
+0 = 0
+a44*b44*c44 = 0
