@@ -5,6 +5,118 @@
 #include <omp.h>
 #include <immintrin.h>
 
+inline __m256i *addV(__m256i *a, __m256i* b, int asiz, int bsiz, int *csiz) {
+  __m256i *c = aligned_alloc(32, (asiz + bsiz)*sizeof(__m256i));
+  if (c = NULL) {
+    return NULL;
+  }
+  __m256i avec, bvec;
+  __mmask8 gt, lt;
+  int i = 0, j = 0, k = 0;
+  while (i < asiz && j < bsiz) {
+    avec = _mm256_load_si256(a + i);
+    bvec = _mm256_load_si256(b + j);
+    gt = _mm256_cmpgt_epi32_mask(avec, bvec);
+    lt = _mm256_cmplt_epi32_mask(avec, bvec);
+    if ((gt&(gt - 1)) > (lt&(lt - 1))) {
+      _mm256_store_si256(c + k++, bvec);
+      ++j;
+    } else if ((lt&(lt - 1)) > (gt&(gt - 1))) {
+      _mm256_store_si256(c + k++, avec);
+      ++i;
+    } else {
+      ++i;
+      ++j;
+    }
+  }
+  while (i < asiz) {
+    avec = _mm256_load_si256(a + i++);
+    _mm256_store_si256(c + k++, avec);
+  }
+  while (j < bsiz) {
+    bvec = _mm256_load_si256(b + j++);
+    _mm256_store_si256(c + k++, bvec);
+  }
+  c = realloc(c, k*sizeof(__m256i));
+  *csiz = k;
+  return c;
+}
+
+inline __m256i *mltV(__m256i *a, __m256i *b, int asiz, int bsiz, int *csiz) {
+  __m256i **temp = malloc(asiz*bsiz*sizeof(void *));
+  int *sizs = calloc(asiz*bsiz, sizeof(int)), glbl = asiz;
+  if (temp == NULL || sizs == NULL) {
+    return NULL;
+  }
+  #pragma omp parallel for
+  for (int i = 0; i < asiz; ++i) {
+    __m256i avec, bvec, cvec, tvec;
+    __mmask8 gt, lt;
+    int locl = i;
+    temp[i] = aligned_alloc(32, bsiz*sizeof(__m256i));
+    avec = _mm256_load_si256(a + i);
+    for (int j = 0; j < bsiz; ++j) {
+      bvec = _mm256_load_si256(b + j);
+      cvec = _mm256_or_si256(avec, bvec);
+      if (sizs[locl] == 0) {
+        _mm256_store_si256(temp[locl], cvec);
+        ++sizs[locl];
+        tvec = cvec;
+      } else {
+        gt = _mm256_cmpgt_epi32_mask(tvec, cvec);
+        lt = _mm256_cmplt_epi32_mask(tvec, cvec);
+        if ((gt&(gt - 1)) > (lt&(lt - 1))) {
+          temp[locl] = realloc(temp[locl], sizs[locl]*sizeof(void *));
+          #pragma omp atomic capture
+          locl = glbl++;
+          temp[locl] = aligned_alloc(32, (bsiz - j)*sizeof(__m256i));
+          _mm256_store_si256(temp[locl], cvec);
+          ++sizs[locl];
+          tvec = cvec;
+        } else if ((lt&(lt - 1)) > (gt&(gt - 1))) {
+          _mm256_store_si256(temp[locl] + sizs[locl]++, cvec);
+          tvec = cvec;
+        } else {
+          --sizs[locl];
+          if (sizs[locl] > 0) {
+            tvec = _mm256_load_si256(temp[locl] + sizs[locl] - 1);
+          }
+        }
+      }
+    }
+  }
+  temp = realloc(temp, glbl*sizeof(void *));
+  sizs = realloc(sizs, glbl*sizeof(void *));
+  while (glbl > 1) {
+    __m256i **ttmp = malloc((glbl + 1)/2*sizeof(void *));
+    int *tsiz = calloc((glbl + 1)/2, sizeof(int));
+    if (ttmp == NULL || tsiz == NULL) {
+      return NULL;
+    }
+    #pragma omp parallel for
+    for (int i = 0; i < glbl/2; ++i) {
+      ttmp[i] = addV(temp[i*2], temp[i*2 + 1], sizs[i*2], sizs[i*2 + 1], &tsiz[i]);
+    }
+    if (glbl%2 == 1) {
+      ttmp[glbl/2] = temp[glbl - 1];
+      tsiz[glbl/2] = sizs[glbl - 1];
+    }
+    for (int i = 0; i < glbl/2*2; ++i) {
+      free(temp[i]);
+    }
+    free(temp);
+    free(sizs);
+    temp = ttmp;
+    sizs = tsiz;
+    glbl = (glbl + 1)/2;
+  }
+  __m256i *c = temp[0];
+  *csiz = sizs[0];
+  free(temp);
+  free(sizs);
+  return c;
+}
+
 typedef struct {
     uint8_t *x;
     uint8_t *y;
