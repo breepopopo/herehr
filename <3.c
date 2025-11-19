@@ -90,7 +90,7 @@ typedef struct {
 
 uint32_t **init_POWER(node_t *nodes, uint32_t start_index, uint32_t end_index, uint32_t num_nodes, uint32_t path_target, uint32_t *out_count) {
     uint32_t thread_num = omp_get_max_threads();
-    uint32_t init_size  = nodes[start_index].out_count;
+    uint32_t init_size = nodes[start_index].out_count;
     uint32_t **global_paths = NULL;
     uint32_t global_count = 0;
     uint32_t global_cap = 0;
@@ -101,10 +101,10 @@ uint32_t **init_POWER(node_t *nodes, uint32_t start_index, uint32_t end_index, u
     {
         uint32_t tid = omp_get_thread_num();
         uint32_t base = init_size / thread_num;
-        uint32_t rem  = init_size % thread_num;
+        uint32_t rem = init_size % thread_num;
         uint32_t chunk = base + (tid < rem ? 1 : 0);
         uint32_t start = tid * base + (tid < rem ? tid : rem);
-        uint32_t end   = start + chunk;
+        uint32_t end = start + chunk;
         uint32_t **local_paths = malloc(sizeof(uint32_t*) * chunk);
         if (!local_paths) {
             fprintf(stderr, "Thread %u: Failed to allocate local paths\n", tid);
@@ -155,7 +155,7 @@ uint32_t **init_POWER(node_t *nodes, uint32_t start_index, uint32_t end_index, u
                         fprintf(stderr, "Thread %u: Failed to allocate new path\n", tid);
                         continue;
                     }
-                    
+
                     memcpy(np, local_paths[i], sizeof(uint32_t) * local_length);
                     np[local_length] = next;
                     next_paths[next_count++] = np;
