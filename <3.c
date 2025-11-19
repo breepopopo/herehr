@@ -88,45 +88,25 @@ typedef struct {
     uint8_t *bdat;
 } edge_t;
 
+uint32_t *unlimited_power(node_t *graph, uint32_t node_count, uint32_t start_node, uint32_t end_node, uint32_t cycle_lenght) {
+    uint32_t thread_num = omp_get_max_threads();
+    uint32_t **starting_range = malloc(sizeof(void *) * thread_num);
+    uint32_t *starting_lenghts;
+    
+}
+
 uint32_t *unlimited_power(node_t *graph, uint32_t node_count, uint32_t start_node, uint32_t end_node, uint32_t cycle_length) {
     uint32_t thread_num = omp_get_max_threads();
-    uint32_t **starting_paths = malloc(sizeof(uint32_t *) * thread_num);
+    uint32_t **starting_paths = malloc(sizeof(void *) * thread_num);
     uint32_t *starting_path_len = malloc(sizeof(uint32_t) * thread_num);
     uint32_t path_num = 0;
-    for (uint32_t i = 0; i < thread_num; ++i) {
-        starting_paths[i] = NULL;
-        starting_path_len[i] = 0;
-        if (i < graph[start_node].out_count) {
-            starting_paths[i] = malloc(sizeof(uint32_t) * 2);
-            starting_paths[i][0] = start_node;
-            starting_paths[i][1] = graph[start_node].out[i];
-            starting_path_len[i] = 2;
-            path_num++;
-        }
-    }
-    if (path_num < thread_num) {
-        uint32_t *queue = malloc(sizeof(uint32_t) * node_count);
-        uint8_t *visited = calloc(node_count, sizeof(uint8_t));
-        uint32_t qh = 0, qt = 0;
-        queue[qt++] = start_node;
-        visited[start_node] = 1;
-        while (qh < qt && path_num < thread_num) {
-            uint32_t u = queue[qh++];
-            for (uint32_t j = 0; j < graph[u].out_count && path_num < thread_num; ++j) {
-                uint32_t v = graph[u].out[j];
-                if (!visited[v]) {
-                    visited[v] = 1;
-                    queue[qt++] = v;
-                    starting_paths[path_num] = malloc(sizeof(uint32_t) * 1);
-                    starting_paths[path_num][0] = v;
-                    starting_path_len[path_num] = 1;
-                    path_num++;
-                }
-            }
-        }
-
-        free(queue);
-        free(visited);
+    if (i < graph[start_node].out_count) {
+        starting_paths[i] = malloc(sizeof(uint32_t));
+        starting_paths[i][0] = start_node;
+        starting_path_len[i] = 1;
+        ++path_num;
+    } else {
+        
     }
     while (path_num < thread_num) {
         starting_paths[path_num] = NULL;
@@ -175,7 +155,6 @@ uint32_t *unlimited_power(node_t *graph, uint32_t node_count, uint32_t start_nod
                 depth--;
                 continue;
             }
-
             uint32_t next = graph[cycle[depth]].out[counter[depth]];
             counter[depth]++;
             depth++;
@@ -194,7 +173,13 @@ uint32_t *unlimited_power(node_t *graph, uint32_t node_count, uint32_t start_nod
     return result;
 }
 
-
 edge_t *calculate_edges(node_t *graph, uint32_t node_count, uint32_t dimension, uint64_t edge_count) {
-    
+
 }
+
+//A_1 x_11 = x_21
+
+
+
+
+//i mean the core is simple graph exploration, start at a cycle,
