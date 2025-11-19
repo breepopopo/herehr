@@ -88,7 +88,168 @@ typedef struct {
     uint8_t *bdat;
 } edge_t;
 
+uint32_t *unlimited_power(node_t *graph,
+                          uint32_t node_count,
+                          uint32_t start_node,
+                          uint32_t end_node,
+                          uint32_t cycle_length)
+{
+    uint32_t thread_num = omp_get_max_threads();
+    uint32_t **starting_paths = malloc(sizeof(uint32_t *) * thread_num);
+    uint32_t *starting_path_len = malloc(sizeof(uint32_t) * thread_num);
+
+    uint32_t path_num = 0;
+
+    // -------------------------
+    // 1. DFS-style initial seeds
+    // -------------------------
+    for (uint32_t i = 0; i < thread_num; ++i) {
+        starting_paths[i] = NULL;
+        starting_path_len[i] = 0;
+
+        if (i < graph[start_node].out_count) {
+            starting_paths[i] = malloc(sizeof(uint32_t) * 2);
+            starting_paths[i][0] = start_node;
+            starting_paths[i][1] = graph[start_node].out[i];
+            starting_path_len[i] = 2;
+            path_num++;
+        }
+    }
+
+    // -------------------------
+    // 2. BFS fill for remaining threads
+    // -------------------------
+    if (path_num < thread_num) {
+        uint32_t *queue = malloc(sizeof(uint32_t) * node_count);
+        uint8_t *visited = calloc(node_count, sizeof(uint8_t));
+
+        uint32_t qh = 0, qt = 0;
+        queue[qt++] = start_node;
+        visited[start_node] = 1;
+
+        while (qh < qt && path_num < thread_num) {
+            uint32_t u = queue[qh++];
+
+            for (uint32_t j = 0; j < graph[u].out_count && path_num < thread_num; ++j) {
+                uint32_t v = graph[u].out[j];
+
+                if (!visited[v]) {
+                    visited[v] = 1;
+                    queue[qt++] = v;
+
+                    starting_paths[path_num] = malloc(sizeof(uint32_t) * 1);
+                    starting_paths[path_num][0] = v;
+                    starting_path_len[path_num] = 1;
+                    path_num++;
+                }
+            }
+        }
+
+        free(queue);
+        free(visited);
+    }
+
+    // -------------------------
+    // 3. Fill unused threads with empty tasks
+    // -------------------------
+    while (path_num < thread_num) {
+        starting_paths[path_num] = NULL;
+        starting_path_len[path_num] = 0;
+        path_num++;
+    }
+
+    // ============================================================
+    // 4. PARALLEL SEARCH
+    // ============================================================
+
+    uint32_t *result = NULL;
+    int found = 0;
+
+    #pragma omp parallel shared(found, result)
+    {
+        int tid = omp_get_thread_num();
+
+        if (found) return;
+
+        // Thread's initial path
+        uint32_t *seed = starting_paths[tid];
+        uint32_t seed_len = starting_path_len[tid];
+
+        // Allocate private DFS stacks
+        uint32_t *cycle = malloc(sizeof(uint32_t) * cycle_length);
+        uint32_t *max_counter = malloc(sizeof(uint32_t) * cycle_length);
+        uint32_t *counter = calloc(cycle_length, sizeof(uint32_t));
+
+        if (!cycle || !counter || !max_counter)
+            goto cleanup;
+
+        // Initialize cycle with the seed
+        for (uint32_t i = 0; i < seed_len; i++)
+            cycle[i] = seed[i];
+
+        uint32_t depth = seed_len - 1;
+
+        // Initialize counters for seed
+        for (uint32_t i = 0; i < seed_len; i++) {
+            uint32_t node = cycle[i];
+            max_counter[i] = graph[node].out_count;
+            counter[i] = 0;
+        }
+
+        // DFS loop
+        while (!found) {
+            if (depth + 1 == cycle_length) {
+                if (cycle[depth] == end_node) {
+                    #pragma omp critical
+                    {
+                        if (!found) {
+                            found = 1;
+                            result = malloc(sizeof(uint32_t) * cycle_length);
+                            memcpy(result, cycle, sizeof(uint32_t) * cycle_length);
+                        }
+                    }
+                }
+                if (depth == seed_len - 1)
+                    break;
+                depth--;
+                continue;
+            }
+
+            if (counter[depth] == max_counter[depth]) {
+                if (depth == seed_len - 1)
+                    break;
+                depth--;
+                continue;
+            }
+
+            uint32_t next = graph[cycle[depth]].out[counter[depth]];
+            counter[depth]++;
+
+            depth++;
+            cycle[depth] = next;
+            max_counter[depth] = graph[next].out_count;
+            counter[depth] = 0;
+        }
+
+    cleanup:
+        free(cycle);
+        free(counter);
+        free(max_counter);
+    }
+
+    // -------------------------
+    // Free initial seeds
+    // -------------------------
+    for (uint32_t i = 0; i < thread_num; i++)
+        free(starting_paths[i]);
+
+    free(starting_paths);
+    free(starting_path_len);
+
+    return result;
+}
+
+
 edge_t *calculate_edges(node_t *graph, uint32_t node_count, uint32_t dimension, uint64_t edge_count) {
     
 }
-
