@@ -88,15 +88,14 @@ typedef struct {
     uint8_t *bdat;
 } edge_t;
 
-uint32_t **init_POWER(node_t *nodes, uint32_t start_index, uint32_t end_index, uint32_t num_nodes, uint32_t path_target, uint32_t *out_count) {
-    uint32_t thread_num = omp_get_max_threads();
-    uint32_t init_size = nodes[start_index].out_count;
-    uint32_t **global_paths = NULL;
-    uint32_t global_count = 0;
-    uint32_t global_cap = 0;
-    omp_lock_t lock;
-    omp_init_lock(&lock);
+//AGAIN (its the way of the world)
 
+uint32_t **init_POWER(uint32_t *graph, uint32_t node_count, uint32_t start_node, uint32_t end_node, uint32_t target_depth, uint32_t *out_pointer, uint32_t *out_lenght) {
+    uint32_t thread_num = omp_get_max_threads();
+    uint32_t init_size = nodes[start_node].out_count;
+    uint32_t ***global_paths = malloc(sizeof(void *) * thread_num);
+    uint32_t global_count = 0;
+    bool stop = 0;
     #pragma omp parallel
     {
         uint32_t tid = omp_get_thread_num();
@@ -105,89 +104,111 @@ uint32_t **init_POWER(node_t *nodes, uint32_t start_index, uint32_t end_index, u
         uint32_t chunk = base + (tid < rem ? 1 : 0);
         uint32_t start = tid * base + (tid < rem ? tid : rem);
         uint32_t end = start + chunk;
-        uint32_t **local_paths = malloc(sizeof(uint32_t*) * chunk);
-        if (!local_paths) {
-            fprintf(stderr, "Thread %u: Failed to allocate local paths\n", tid);
-            return;
-        }
-
+        uint32_t **local_paths = malloc(sizeof(void *) * chunk);
         uint32_t local_paths_count = 0;
-        uint32_t local_length = 2;
+        uint32_t local_paths_lenght = 2;
         for (uint32_t i = start; i < end; ++i) {
-            uint32_t next = nodes[start_index].out[i];
-            if (next == end_index) continue;
+            if (graph[start_node].out[i] == end_node) continue;
             local_paths[local_paths_count] = malloc(sizeof(uint32_t) * 2);
-            if (!local_paths[local_paths_count]) {
-                fprintf(stderr, "Thread %u: Failed to allocate path\n", tid);
-                continue;
-            }
-
-            local_paths[local_paths_count][0] = start_index;
-            local_paths[local_paths_count++][1] = next;
+            local_paths[local_paths_count][0] = start_node;
+            local_paths[local_paths_count++][1] = graph[start_node].out[i];
         }
 
         while (true) {
             uint32_t global_copy;
+            bool stop_copy, cycle;
             #pragma omp atomic read
             global_copy = global_count;
-            if (global_copy >= path_target || local_paths_count == 0) break;
+            #pragma omp atomic read
+            stop_copy = stop;
+            if (stop_copy == 1 || global_copy >= thread_count) break;
             uint32_t estimate = 0;
-            for (uint32_t i = 0; i < local_paths_count; ++i) estimate += nodes[local_paths[i][local_length - 1]].out_count;
-            uint32_t **next_paths = malloc(sizeof(uint32_t*) * estimate);
+            for (uint32_t i = 0; i < local_paths_count; ++i) estimate += graph[local_paths[i][local_paths_lenght - 1]].out_count;
+            uint32_t **next_paths = malloc(sizeof(void *) * estimate);
             uint32_t next_count = 0;
             for (uint32_t i = 0; i < local_paths_count; ++i) {
-                uint32_t tail = local_paths[i][local_length - 1];
-                uint32_t outc = nodes[tail].out_count;
-                for (uint32_t j = 0; j < outc; ++j) {
-                    uint32_t next = nodes[tail].out[j];
-                    if (next == start_index) continue;
-                    if (next == end_index) continue;
-                    bool cycle = false;
-                    for (uint32_t k = 0; k < local_length; ++k) {
-                        if (local_paths[i][k] == next) {
-                            cycle = true;
+                for (uint32_t j = 0; j < graph[local_paths[i][local_paths_lenght - 1]].out_count; ++j) {
+                    if (graph[local_paths[i][local_paths_lenght - 1]] == start_node) continue;
+                    if (graph[local_paths[i][local_paths_lenght - 1]] == end_node && local_paths_lenght >= target_depth) {
+                        #pragma omp critical
+                        if (stop == 1) {
+                            break;
+                        } else {
+                            stop = 1;
+                            memcpy(out_pointer, local_paths[i], local_paths_lenght);
+                            *out_lenght = local_paths_lenght;
                             break;
                         }
                     }
-                    if (cycle) continue;
-                    uint32_t *np = malloc(sizeof(uint32_t) * (local_length + 1));
-                    if (!np) {
-                        fprintf(stderr, "Thread %u: Failed to allocate new path\n", tid);
+                    cycle = 0;
+                    for (uint32_t k = 0; k < local_lenght; ++k) {
+                        if (graph[local_paths[i][local_paths_lenght - 1]] == local_paths[i][k]) {
+                            cycle = 1;
+                            break;
+                        }
+                    }
+                    if (cycle) {
+                        cycle = 0;
                         continue;
                     }
-
-                    memcpy(np, local_paths[i], sizeof(uint32_t) * local_length);
-                    np[local_length] = next;
-                    next_paths[next_count++] = np;
+                    #pragma omp atomic read
+                    stop_copy = stop;
+                    if (stop_copy) {
+                        cycle = 1;
+                        break;
+                    }
+                    uint32_t *new_pointer = malloc(sizeof(uint32_t) * (local_paths_length + 1));
+                    memcpy(new_pointer, local_paths[i], sizeof(uint32_t) * local_paths_length);
+                    new_pointer[local_paths_length] = graph[local_paths[i][local_paths_lenght - 1]];
+                    next_paths[next_count++] = new_pointer;
                     #pragma omp atomic
                     ++global_count;
                 }
-                free(local_paths[i]);
+                #pragma omp atomic read
+                stop_copy = stop;
+                if (stop_copy == 1) {
+                    if (cycle == 1) {
+
+                    }
+
+                }
             }
-            free(local_paths);
+
             local_paths = next_paths;
             local_paths_count = next_count;
-            local_length++;
+            ++local_paths_length;
+
+            free(next_paths);
         }
-        for (uint32_t i = 0; i < local_paths_count; ++i) {
-            if (nodes[local_paths[i][local_length - 1]].out_count == 0) {
-                free(local_paths[i]);
-            } else {
-                omp_set_lock(&lock);
-                if (global_count >= global_cap) {
-                    global_cap = (global_cap == 0 ? 1024 : global_cap * 2);
-                    global_paths = realloc(global_paths, sizeof(uint32_t*) * global_cap);
-                }
-                global_paths[global_count++] = local_paths[i];
-                omp_unset_lock(&lock);
-            }
-        }
-        free(local_paths);
+        global_paths[tid] = local_paths;
     }
-    omp_destroy_lock(&lock);
-    *out_count = global_count;
-    return global_paths;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
