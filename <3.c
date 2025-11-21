@@ -157,10 +157,9 @@ uint32_t **init_POWER(uint32_t *graph, uint32_t node_count, uint32_t start_node,
                         cycle = 1;
                         break;
                     }
-                    uint32_t *new_pointer = malloc(sizeof(uint32_t) * (local_paths_length + 1));
-                    memcpy(new_pointer, local_paths[i], sizeof(uint32_t) * local_paths_length);
-                    new_pointer[local_paths_length] = graph[local_paths[i][local_paths_lenght - 1]];
-                    next_paths[next_count++] = new_pointer;
+                    next_paths[next_count] = malloc(sizeof(uint32_t) * (local_paths_lenght + 1));
+                    memcpy(next_paths[next_count], local_paths[i], sizeof(uint32_t) * local_paths_lenght);
+                    next_paths[next_count++][local_paths_lenght] = graph[local_paths[i][local_paths_lenght - 1]].out[j];
                     #pragma omp atomic
                     ++global_count;
                 }
@@ -173,7 +172,10 @@ uint32_t **init_POWER(uint32_t *graph, uint32_t node_count, uint32_t start_node,
 
                 }
             }
-
+            for (uint32_t i = 0; i < local_paths_count; ++i) {
+                free(local_paths[i]);
+            }
+            free(local_paths);
             local_paths = next_paths;
             local_paths_count = next_count;
             ++local_paths_length;
